@@ -13,6 +13,7 @@ hour(1..8).
 % settimane full-time (lun-sab)
 fulltime_week(7;16).
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Insegnamenti, docenti e ore totali
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -49,6 +50,7 @@ teaching(diritto).     teacher(diritto,travostino).      hours(diritto,10).
 
 prof(P) :- teacher(_,P).
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Slot orari disponibili
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -62,11 +64,13 @@ slot(W,6,H) :- week(W), H=1..6.
 % Settimane full-time (7 e 16): lun-ven (1..5) 8 ore
 slot(W,D,H) :- fulltime_week(W), D=1..5, H=1..8.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Mappatura (W,D,H) -> tempo lineare (per confronti)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 time(W,D,H,Time) :- slot(W,D,H), Time = W*100 + D*10 + H.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Ausiliari: prima/ultima lezione e settimana
@@ -88,6 +92,7 @@ last_week(T,LW) :-
     teaching(T),
     LW = #max{ W : lecture(T,W,_,_) }.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Scelta delle lezioni
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -98,8 +103,11 @@ last_week(T,LW) :-
 % Totale ore per insegnamento = ore richieste
 :- teaching(T), hours(T,Tot), Tot != #count{W,D,H : lecture(T,W,D,H)}.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Vincoli
+%%%%%%%%%%%%%%%%%%   Vincoli   %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1. Vincolo: docente max 4 ore al giorno
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -109,6 +117,7 @@ prof_hour(W,D,P,H) :- lecture(T,W,D,H), teacher(T,P).
 :- prof(P), week(W), day(D),
    N = #count{H : prof_hour(W,D,P,H)},
    N > 4.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 2. Vincolo: ogni insegnamento 2,3 o 4 ore nello stesso giorno
@@ -125,6 +134,7 @@ prof_hour(W,D,P,H) :- lecture(T,W,D,H), teacher(T,P).
 
 % Le ore di uno stesso insegnamento nello stesso giorno devono formare un unico blocco contiguo
 :- lecture(T,W,D,H1), lecture(T,W,D,H2), H2 >= H1 + 2, not lecture(T,W,D,H1+1).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 3. Vincolo: il primo giorno di lezione prevede che, nelle prime due ore, vi sia la presentazione del master
@@ -153,11 +163,13 @@ free_block_start(W,D,H) :- free_block(W,D,H), H > 1, not free_block(W,D,H-1).
 
 :- 0 { free_block_start(W,D,H) } 5.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 5. Vincolo Project Management finisce entro settimana 7
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- lecture(pm,W,_,_), W > 7.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 6. Vincolo: Prima lezione di Access prima che termini markup
@@ -166,6 +178,7 @@ free_block_start(W,D,H) :- free_block(W,D,H), H > 1, not free_block(W,D,H-1).
 :- first_time(access,FA),
    last_time(markup,LM),
    FA >= LM.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 7. Vincolo: distanza max 8 settimane tra prima e ultima lezione
@@ -177,6 +190,7 @@ free_block_start(W,D,H) :- free_block(W,D,H), H > 1, not free_block(W,D,H-1).
    W2 >= W1 + 9,
    lecture(T,W1,_,_),
    lecture(T,W2,_,_).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 8. Vincolo: Tecnologie server-side -> 5 blocchi da 4 ore
