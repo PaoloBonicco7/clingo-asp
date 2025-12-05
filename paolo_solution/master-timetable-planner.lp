@@ -140,15 +140,19 @@ prof_hour(W,D,P,H) :- lecture(T,W,D,H), teacher(T,P).
 % 3. Vincolo: il primo giorno di lezione prevede che, nelle prime due ore, vi sia la presentazione del master
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Presentazione del master (occupazione esplicita)
+presentation(1,5,1..2).
+
 % Nessuna lezione il primo venerdì, ore 1-2
 :- lecture(_,1,5,1..2).
- 
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 4. Vincolo: almeno 6 blocchi liberi da 2 ore consecutive
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 occupied(W,D,H) :- lecture(_,W,D,H).
+occupied(W,D,H) :- presentation(W,D,H).
 
 free_block(W,D,H) :-
     slot(W,D,H),
@@ -243,7 +247,112 @@ pre(img_static, grafica3d).
 % Output
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-#show lecture/4.
+#const raw = 0.
+#show skip/0.
+skip :- 0 = 1.
+#script (python)
+import sys
+
+RAW = 0
+DAY_LABEL = {1: "Lun", 2: "Mar", 3: "Mer", 4: "Gio", 5: "Ven", 6: "Sab"}
+COURSE_LABEL = {
+    "pm": "Project Management",
+    "ict": "Fondamenti ICT",
+    "markup": "Linguaggi di markup",
+    "qualita": "Qualita",
+    "client": "Ambienti client-side",
+    "grafica_int": "Progettazione grafica/UI",
+    "basi_dati": "Basi di dati",
+    "social_tools": "Social media: strumenti",
+    "img_static": "Img. statiche",
+    "access": "Accessibilita",
+    "marketing": "Marketing digitale",
+    "foto": "Fotografia",
+    "risorse": "Risorse digitali",
+    "server": "Tecnologie server-side",
+    "tech_mark": "Tech marketing",
+    "intro_sm": "Intro social media",
+    "suono": "Suono",
+    "seq_img": "Sequenze immagini",
+    "comunicazione": "Comunicazione",
+    "semiologia": "Semiologia",
+    "crossmedia": "Crossmedia",
+    "grafica3d": "Grafica 3D",
+    "mobile1": "Mobile I",
+    "mobile2": "Mobile II",
+    "hr": "Risorse umane",
+    "diritto": "Diritto",
+    "presentazione": "Presentazione del master"
+}
+
+def friendly(name: str) -> str:
+    return COURSE_LABEL.get(name, name)
+
+def on_model(model):
+    lectures = []
+    presentations = []
+    for sym in model.symbols(atoms=True):
+        if sym.name == "lecture" and len(sym.arguments) == 4:
+            t, w, d, h = sym.arguments
+            lectures.append((int(w.number), int(d.number), int(h.number), str(t)))
+        if sym.name == "presentation" and len(sym.arguments) == 3:
+            w, d, h = sym.arguments
+            presentations.append((int(w.number), int(d.number), int(h.number)))
+
+    items = lectures + [(w, d, h, "presentazione") for (w, d, h) in presentations]
+    items.sort()
+    by_week = {}
+    for w, d, h, t in items:
+        by_week.setdefault(w, []).append((d, h, t))
+
+    for w in sorted(by_week):
+        print(f"\nSettimana {w}")
+        days = sorted({d for d, _, _ in by_week[w]})
+        for d in days:
+            day_slots = sorted((h, t) for d0, h, t in by_week[w] if d0 == d)
+            # raggruppa in blocchi contigui per leggibilita
+            blocks = []
+            current = []
+            last_h = None
+            for h, t in day_slots:
+                if last_h is None or h == last_h + 1:
+                    current.append((h, t))
+                else:
+                    blocks.append(current)
+                    current = [(h, t)]
+                last_h = h
+            if current:
+                blocks.append(current)
+
+            segments = []
+            for block in blocks:
+                h_start, _ = block[0]
+                h_end, tname = block[-1]
+                label = friendly(tname)
+                if h_start == h_end:
+                    segments.append(f"{h_start}: {label}")
+                else:
+                    segments.append(f"{h_start}-{h_end}: {label}")
+
+            print(f"  {DAY_LABEL[d]:<3} | " + " ; ".join(segments))
+
+    if RAW:
+        atoms = " ".join(f"lecture({t},{w},{d},{h})" for w, d, h, t in lectures)
+        print(f"\n[lecture/4] {atoms}\n")
+
+def main(prg):
+    global RAW
+    const_raw = prg.get_const("raw")
+    if const_raw is not None:
+        try:
+            RAW = int(const_raw.number)
+        except Exception:
+            pass
+    prg.ground([("base", [])])
+    with prg.solve(yield_=True) as handle:
+        for model in handle:
+            on_model(model)
+#end.
 
 % Esegui con: clingo master-timetable-planner.lp 0              (genera tutti i modelli)
 % Esegui con: clingo master-timetable-planner.lp --models=1     (genera un solo modello)
