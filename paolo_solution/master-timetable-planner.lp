@@ -69,63 +69,7 @@ slot(W,D,H) :- fulltime_week(W), D=1..5, H=1..8.
 time(W,D,H,Time) :- slot(W,D,H), Time = W*100 + D*10 + H.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Scelta delle lezioni
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% In ogni slot, al più un insegnamento
-{ lecture(T,W,D,H) : teaching(T) } <= 1 :- slot(W,D,H).
-
-% Totale ore per insegnamento = ore richieste
-:- teaching(T), hours(T,Tot), Tot != #count{W,D,H : lecture(T,W,D,H)}.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Primo giorno, prime due ore: presentazione
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% Nessuna lezione il primo venerdì, ore 1-2
-:- lecture(_,1,5,1..2).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Vincolo: docente max 4 ore al giorno
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-prof_hour(W,D,P,H) :- lecture(T,W,D,H), teacher(T,P).
-
-:- prof(P), week(W), day(D),
-   N = #count{H : prof_hour(W,D,P,H)},
-   N > 4.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Vincolo: ogni insegnamento 2,3 o 4 ore nello stesso giorno
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% Vietata giornata con 1 sola ora
-:- teaching(T), week(W), day(D),
-   1 = #count{H : lecture(T,W,D,H)}.
-
-% Vietata giornata con più di 4 ore
-:- teaching(T), week(W), day(D),
-   N = #count{H : lecture(T,W,D,H)},
-   N > 4.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Vincolo: almeno 6 blocchi liberi da 2 ore consecutive
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-occupied(W,D,H) :- lecture(_,W,D,H).
-
-free_block(W,D,H) :-
-    slot(W,D,H),
-    H2 = H+1,
-    slot(W,D,H2),
-    not occupied(W,D,H),
-    not occupied(W,D,H2).
-
-% almeno 6 blocchi liberi totali
-:- 0 { free_block(W,D,H) } 5.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Prima/ultima lezione (tempo e settimana)
+% Ausiliari: prima/ultima lezione e settimana
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 first_time(T,FT) :-
@@ -145,13 +89,78 @@ last_week(T,LW) :-
     LW = #max{ W : lecture(T,W,_,_) }.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Project Management finisce entro settimana 7
+% Scelta delle lezioni
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% In ogni slot, al più un insegnamento
+{ lecture(T,W,D,H) : teaching(T) } <= 1 :- slot(W,D,H).
+
+% Totale ore per insegnamento = ore richieste
+:- teaching(T), hours(T,Tot), Tot != #count{W,D,H : lecture(T,W,D,H)}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Vincoli
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1. Vincolo: docente max 4 ore al giorno
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+prof_hour(W,D,P,H) :- lecture(T,W,D,H), teacher(T,P).
+
+:- prof(P), week(W), day(D),
+   N = #count{H : prof_hour(W,D,P,H)},
+   N > 4.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 2. Vincolo: ogni insegnamento 2,3 o 4 ore nello stesso giorno
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Vietata giornata con 1 sola ora
+:- teaching(T), week(W), day(D),
+   1 = #count{H : lecture(T,W,D,H)}.
+
+% Vietata giornata con più di 4 ore
+:- teaching(T), week(W), day(D),
+   N = #count{H : lecture(T,W,D,H)},
+   N > 4.
+
+% Le ore di uno stesso insegnamento nello stesso giorno devono formare un unico blocco contiguo
+:- lecture(T,W,D,H1), lecture(T,W,D,H2), H2 >= H1 + 2, not lecture(T,W,D,H1+1).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 3. Vincolo: il primo giorno di lezione prevede che, nelle prime due ore, vi sia la presentazione del master
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Nessuna lezione il primo venerdì, ore 1-2
+:- lecture(_,1,5,1..2).
+ 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 4. Vincolo: almeno 6 blocchi liberi da 2 ore consecutive
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+occupied(W,D,H) :- lecture(_,W,D,H).
+
+free_block(W,D,H) :-
+    slot(W,D,H),
+    H2 = H+1,
+    slot(W,D,H2),
+    not occupied(W,D,H),
+    not occupied(W,D,H2).
+
+% almeno 6 blocchi liberi non sovrapposti (contiamo solo l'inizio di ciascun blocco)
+free_block_start(W,D,H) :- free_block(W,D,H), H = 1.
+free_block_start(W,D,H) :- free_block(W,D,H), H > 1, not free_block(W,D,H-1).
+
+:- 0 { free_block_start(W,D,H) } 5.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 5. Vincolo Project Management finisce entro settimana 7
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- lecture(pm,W,_,_), W > 7.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Prima lezione di Access prima che termini markup
+% 6. Vincolo: Prima lezione di Access prima che termini markup
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- first_time(access,FA),
@@ -159,9 +168,8 @@ last_week(T,LW) :-
    FA >= LM.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Distanza max 8 settimane tra prima e ultima lezione
-% (nessuna coppia di settimane dello stesso corso
-%  con distanza >= 9)
+% 7. Vincolo: distanza max 8 settimane tra prima e ultima lezione
+% (nessuna coppia di settimane dello stesso corso con distanza >= 9)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- teaching(T),
@@ -171,7 +179,7 @@ last_week(T,LW) :-
    lecture(T,W2,_,_).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Tecnologie server-side: 5 blocchi da 4 ore
+% 8. Vincolo: Tecnologie server-side -> 5 blocchi da 4 ore
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % vietato che server faccia esattamente 2 ore in un giorno
@@ -184,15 +192,18 @@ last_week(T,LW) :-
 
 % (1 e >4 sono già esclusi dai vincoli generali; con 20 ore restano 5×4)
 
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Crossmedia e Intro SM: prima lezione in settimana 16
+% 9. Vincolo: Crossmedia e Intro SM -> prima lezione in settimana 16
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- first_week(crossmedia,FW), FW != 16.
 :- first_week(intro_sm,FW),   FW != 16.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Propedeuticità
+% 10. Vincolo: Propedeuticità
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 pre(ict,        client).
@@ -212,6 +223,7 @@ pre(img_static, grafica3d).
    last_time(Prev,LP),
    first_time(Next,FN),
    FN <= LP.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Output
