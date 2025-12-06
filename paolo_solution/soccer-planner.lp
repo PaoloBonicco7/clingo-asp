@@ -55,14 +55,88 @@ pair(T1,T2,G) :- in_group(T1,G), in_group(T2,G), T1 < T2. %T1 < T2 per evitare d
    not 1 { plays(T,T2,G,D) : pair(T,T2,G) ; plays(T1,T,G,D) : pair(T1,T,G) } 1.
 
 % ---------- Output ----------
-#show in_group/2.
-#show plays/4.
+#const raw = 0.     % metti -c raw=1 per mostrare anche in_group/2 e plays/4
 
-% Pretty-print opzionale
-#show pretty_group/2.
-pretty_group(G,T) :- in_group(T,G)
-.
-#show pretty_match/5.
-pretty_match(G,D,T1,T2,vs) :- plays(T1,T2,G,D).
+#show skip/0.
+skip :- 0 = 1.
 
-% Esegui con: clingo soccer-planner.lp --models=1 --quiet=1,1
+#show in_group/2 : raw=1.
+#show plays/4    : raw=1.
+
+#script (python)
+import sys
+from collections import defaultdict
+
+CAT_ABBR = {"seed": "S", "top": "T1", "tier2": "T2", "underdog": "U"}
+CONT_ABBR = {
+    "europe": "EU",
+    "concacaf": "NA",
+    "southamerica": "SA",
+    "asia": "AS",
+    "africa": "AF",
+    "oceania": "OC",
+}
+
+RAW = 0
+
+def friendly_team(t, cat_map, cont_map):
+    cat = CAT_ABBR.get(cat_map.get(t, ""), "?")
+    cont = CONT_ABBR.get(cont_map.get(t, ""), "?")
+    return f"{t:02d}({cat}/{cont})"
+
+def on_model(model):
+    cat_map = {}
+    cont_map = {}
+    groups = defaultdict(list)
+    matches = defaultdict(lambda: defaultdict(list))
+
+    for sym in model.symbols(atoms=True):
+        if sym.name == "category" and len(sym.arguments) == 2:
+            t, c = sym.arguments
+            cat_map[int(t.number)] = str(c)
+        elif sym.name == "continent" and len(sym.arguments) == 2:
+            t, c = sym.arguments
+            cont_map[int(t.number)] = str(c)
+        elif sym.name == "in_group" and len(sym.arguments) == 2:
+            t, g = sym.arguments
+            groups[int(g.number)].append(int(t.number))
+        elif sym.name == "plays" and len(sym.arguments) == 4:
+            t1, t2, g, d = sym.arguments
+            matches[int(g.number)][int(d.number)].append((int(t1.number), int(t2.number)))
+
+    for g in sorted(groups):
+        teams = ", ".join(friendly_team(t, cat_map, cont_map) for t in sorted(groups[g]))
+        print(f"\nGruppo {g}: {teams}")
+        for d in sorted(matches[g]):
+            day_matches = "; ".join(f"{t1:02d} vs {t2:02d}" for t1, t2 in sorted(matches[g][d]))
+            print(f"  Giornata {d}: {day_matches}")
+
+    if RAW:
+        atoms = " ".join(
+            [f"in_group({t},{g})" for g in sorted(groups) for t in sorted(groups[g])]
+            + [
+                f"plays({t1},{t2},{g},{d})"
+                for g in sorted(matches)
+                for d in sorted(matches[g])
+                for t1, t2 in sorted(matches[g][d])
+            ]
+        )
+        print(f"\n[raw] {atoms}\n")
+
+def main(prg):
+    global RAW
+    const_raw = prg.get_const("raw")
+    if const_raw is not None:
+        try:
+            RAW = int(const_raw.number)
+        except Exception:
+            pass
+    prg.ground([("base", [])])
+    with prg.solve(yield_=True) as handle:
+        for model in handle:
+            on_model(model)
+#end.
+
+% Esegui con:
+%   clingo soccer-planner.lp --models=1 --quiet=1      (solo tabellone)
+%   clingo soccer-planner.lp --models=1 --quiet=1 -c raw=1   (tabellone + atomi)
