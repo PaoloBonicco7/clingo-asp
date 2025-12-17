@@ -31,22 +31,23 @@ category(17..24, tier2).
 category(25..32, underdog).
 
 
-% ---------- Assegnazione squadre a gironi ----------
-% Scelta: ogni squadra appartiene a esattamente un girone
+% ---------- 1 - Assegnazione squadre a gironi ----------
+%  Scelta: ogni squadra appartiene a esattamente un girone
 1 { in_group(T,G) : group(G) } 1 :- team(T).
 
 % Esattamente UNA squadra per categoria in ogni girone
 1 { in_group(T,G) : team(T), category(T,C) } 1 :- group(G), cat(C).
 
-% ---------- Diversità continenti ----------
+% ---------- 2 - Diversità continenti ----------
 % In ogni girone devono essere rappresentati almeno 3 continenti
 present(G,C) :- in_group(T,G), continent(T,C).
 :- group(G), #count { C : present(G,C) } < 3.
 
-% ---------- Generazione partite ----------
+% ---------- 3 - Generazione partite ----------
+% Genera tutte le coppie di squadre in un girone
 pair(T1,T2,G) :- in_group(T1,G), in_group(T2,G), T1 < T2. %T1 < T2 per evitare duplicati
 
-% ---------- Pianificazione giornate ----------
+% ---------- 4 - Pianificazione giornate ----------
 % Ogni coppia gioca in una sola giornata
 1 { plays(T1,T2,G,D) : day(D) } 1 :- pair(T1,T2,G).
 

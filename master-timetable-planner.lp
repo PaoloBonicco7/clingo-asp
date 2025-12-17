@@ -211,7 +211,6 @@ free_block_start(W,D,H) :- free_block(W,D,H), H > 1, not free_block(W,D,H-1).
 % (1 e >4 sono già esclusi dai vincoli generali; con 20 ore restano 5×4)
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 9. Vincolo: Crossmedia e Intro SM -> prima lezione in settimana 16
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
