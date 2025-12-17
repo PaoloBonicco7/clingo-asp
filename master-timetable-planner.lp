@@ -243,17 +243,16 @@ pre(img_static, grafica3d).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Output
+% Output (stampa leggibile + raw opzionale)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 #const raw = 0.
 #show skip/0.
 skip :- 0 = 1.
-#script (python)
-import sys
 
-RAW = 0
+#script (python)
 DAY_LABEL = {1: "Lun", 2: "Mar", 3: "Mer", 4: "Gio", 5: "Ven", 6: "Sab"}
+
 COURSE_LABEL = {
     "pm": "Project Management",
     "ict": "Fondamenti ICT",
@@ -281,62 +280,111 @@ COURSE_LABEL = {
     "mobile2": "Mobile II",
     "hr": "Risorse umane",
     "diritto": "Diritto",
-    "presentazione": "Presentazione del master"
+    "presentazione": "Presentazione del master",
 }
 
-def friendly(name: str) -> str:
-    return COURSE_LABEL.get(name, name)
+RAW = 0
 
-def on_model(model):
+def friendly(course_id: str) -> str:
+    return COURSE_LABEL.get(course_id, course_id)
+
+def collect_items(model):
+    """
+    Estrae:
+      - lecture(T,W,D,H)  -> (W,D,H,T)
+      - presentation(W,D,H) -> (W,D,H,"presentazione")
+    """
     lectures = []
     presentations = []
+
     for sym in model.symbols(atoms=True):
         if sym.name == "lecture" and len(sym.arguments) == 4:
             t, w, d, h = sym.arguments
             lectures.append((int(w.number), int(d.number), int(h.number), str(t)))
-        if sym.name == "presentation" and len(sym.arguments) == 3:
+        elif sym.name == "presentation" and len(sym.arguments) == 3:
             w, d, h = sym.arguments
-            presentations.append((int(w.number), int(d.number), int(h.number)))
+            presentations.append((int(w.number), int(d.number), int(h.number), "presentazione"))
 
-    items = lectures + [(w, d, h, "presentazione") for (w, d, h) in presentations]
-    items.sort()
+    items = lectures + presentations
+    items.sort()  # ordina per (W,D,H,corso)
+    return items, lectures
+
+def group_by_week(items):
+    """
+    items: lista (W,D,H,T)
+    ritorna dizionario: week -> lista di (D,H,T)
+    """
     by_week = {}
     for w, d, h, t in items:
         by_week.setdefault(w, []).append((d, h, t))
+    return by_week
+
+def group_day_slots_into_blocks(day_slots):
+    """
+    day_slots: lista ordinata di (H,T) per un singolo giorno
+    Raggruppa in blocchi contigui SOLO se:
+      - ore contigue (h == prev_h + 1)
+      - stesso corso (t == prev_t)
+    Ritorna lista di blocchi, ogni blocco è lista di (H,T).
+    """
+    blocks = []
+    current = []
+
+    last_h = None
+    last_t = None
+
+    for h, t in day_slots:
+        if last_h is None:
+            current = [(h, t)]
+        elif h == last_h + 1 and t == last_t:
+            current.append((h, t))
+        else:
+            blocks.append(current)
+            current = [(h, t)]
+
+        last_h = h
+        last_t = t
+
+    if current:
+        blocks.append(current)
+
+    return blocks
+
+def format_blocks(blocks):
+    """
+    Converte i blocchi in stringhe tipo:
+      "1-2: Project Management ; 4-5: Fondamenti ICT"
+    """
+    segments = []
+    for block in blocks:
+        h_start, tname = block[0]
+        h_end, _ = block[-1]
+        label = friendly(tname)
+
+        if h_start == h_end:
+            segments.append(f"{h_start}: {label}")
+        else:
+            segments.append(f"{h_start}-{h_end}: {label}")
+
+    return " ; ".join(segments)
+
+def on_model(model):
+    items, lectures = collect_items(model)
+    by_week = group_by_week(items)
 
     for w in sorted(by_week):
         print(f"\nSettimana {w}")
-        days = sorted({d for d, _, _ in by_week[w]})
+
+        days = sorted({d for (d, _, _) in by_week[w]})
         for d in days:
-            day_slots = sorted((h, t) for d0, h, t in by_week[w] if d0 == d)
-            # raggruppa in blocchi contigui per leggibilita
-            blocks = []
-            current = []
-            last_h = None
-            for h, t in day_slots:
-                if last_h is None or h == last_h + 1:
-                    current.append((h, t))
-                else:
-                    blocks.append(current)
-                    current = [(h, t)]
-                last_h = h
-            if current:
-                blocks.append(current)
+            day_slots = sorted((h, t) for (d0, h, t) in by_week[w] if d0 == d)
+            blocks = group_day_slots_into_blocks(day_slots)
+            line = format_blocks(blocks)
+            print(f"  {DAY_LABEL[d]:<3} | {line}")
 
-            segments = []
-            for block in blocks:
-                h_start, _ = block[0]
-                h_end, tname = block[-1]
-                label = friendly(tname)
-                if h_start == h_end:
-                    segments.append(f"{h_start}: {label}")
-                else:
-                    segments.append(f"{h_start}-{h_end}: {label}")
-
-            print(f"  {DAY_LABEL[d]:<3} | " + " ; ".join(segments))
-
+    # raw mode: stampa gli atomi lecture/4 per debug dei vincoli
     if RAW:
-        atoms = " ".join(f"lecture({t},{w},{d},{h})" for w, d, h, t in lectures)
+        atoms = " ".join(f"lecture({t},{w},{d},{h})" for (w, d, h, t) in lectures)
         print(f"\n[lecture/4] {atoms}\n")
 
 def main(prg):
@@ -346,7 +394,8 @@ def main(prg):
         try:
             RAW = int(const_raw.number)
         except Exception:
-            pass
+            RAW = 0
+
     prg.ground([("base", [])])
     with prg.solve(yield_=True) as handle:
         for model in handle:

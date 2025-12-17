@@ -52,8 +52,10 @@ pair(T1,T2,G) :- in_group(T1,G), in_group(T2,G), T1 < T2. %T1 < T2 per evitare d
 1 { plays(T1,T2,G,D) : day(D) } 1 :- pair(T1,T2,G).
 
 % Una squadra non può giocare 0 o >1 partite nella stessa giornata (equivalente a "esattamente 1")
+% ";" è un OR - T non può essere in più di una partita in giornata D (sia che sia prima o seconda delle coppie)
+% se conteggio è 0 o >= 2, vincolo fallisce
 :- in_group(T,G), day(D),
-   not 1 { plays(T,T2,G,D) : pair(T,T2,G) ; plays(T1,T,G,D) : pair(T1,T,G) } 1.
+   not 1 { plays(T,T2,G,D) : pair(T,T2,G) ; plays(T1,T,G,D) : pair(T1,T,G) } 1. 
 
 % ---------- Output ----------
 #const raw = 0.     % metti -c raw=1 per mostrare anche in_group/2 e plays/4
